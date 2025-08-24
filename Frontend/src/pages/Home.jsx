@@ -53,14 +53,18 @@ const Home = () => {
     }, {
       withCredentials: true
     })
-    getMessages(response.data.chat._id);
+    const chatId = response.data.chat._id;
+    getMessages(chatId);
     dispatch(startNewChat(response.data.chat));
     setSidebarOpen(false);
+    // Join the new chat room
+    if (socket) {
+      socket.emit("join-chat", chatId);
+    }
   }
 
   // Ensure at least one chat exists initially
   useEffect(() => {
-
     axios.get("https://cohort-1-project-chat-gpt.onrender.com/api/chat", { withCredentials: true })
       .then(response => {
         dispatch(setChats(response.data.chats.reverse()));
@@ -72,21 +76,38 @@ const Home = () => {
 
     tempSocket.on("ai-response", (messagePayload) => {
       console.log("Received AI response:", messagePayload);
-
-      setMessages((prevMessages) => [ ...prevMessages, {
-        type: 'ai',
-        content: messagePayload.content
-      } ]);
-
-      dispatch(sendingFinished());
+      // Only add message if it matches the current chat
+      if (messagePayload.chat === activeChatId) {
+        if (messagePayload.error) {
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              type: 'ai',
+              content: messagePayload.content || 'An error occurred while processing your request.'
+            }
+          ]);
+        } else {
+          setMessages((prevMessages) => [ ...prevMessages, {
+            type: 'ai',
+            content: messagePayload.content
+          } ]);
+        }
+      }
+      // Only finish sending if not error (prevents double finish if error already handled)
+      if (!messagePayload.error) {
+        dispatch(sendingFinished());
+      }
     });
 
     setSocket(tempSocket);
 
-  }, []);
+    return () => {
+      tempSocket.disconnect();
+      dispatch(sendingFinished());
+    };
+  }, [activeChatId]);
 
   const sendMessage = async () => {
-
     const trimmed = input.trim();
     console.log("Sending message:", trimmed);
     if (!trimmed || !activeChatId || isSending) return;
@@ -102,32 +123,27 @@ const Home = () => {
     setMessages(newMessages);
     dispatch(setInput(''));
 
-    socket.emit("ai-message", {
-      chat: activeChatId,
-      content: trimmed
-    })
-
-    // try {
-    //   const reply = await fakeAIReply(trimmed);
-    //   dispatch(addAIMessage(activeChatId, reply));
-    // } catch {
-    //   dispatch(addAIMessage(activeChatId, 'Error fetching AI response.', true));
-    // } finally {
-    //   dispatch(sendingFinished());
-    // }
+    // Ensure we are in the correct chat room before sending
+    if (socket) {
+      socket.emit("join-chat", activeChatId);
+      socket.emit("ai-message", {
+        chat: activeChatId,
+        content: trimmed
+      });
+    }
   }
 
   const getMessages = async (chatId) => {
-
-   const response = await  axios.get(`https://cohort-1-project-chat-gpt.onrender.com/api/chat/messages/${chatId}`, { withCredentials: true })
-
-   console.log("Fetched messages:", response.data.messages);
-
-   setMessages(response.data.messages.map(m => ({
-     type: m.role === 'user' ? 'user' : 'ai',
-     content: m.content
-   })));
-
+    const response = await axios.get(`https://cohort-1-project-chat-gpt.onrender.com/api/chat/messages/${chatId}`, { withCredentials: true })
+    console.log("Fetched messages:", response.data.messages);
+    setMessages(response.data.messages.map(m => ({
+      type: m.role === 'user' ? 'user' : 'ai',
+      content: m.content
+    })));
+    // Join the chat room when messages are loaded
+    if (socket) {
+      socket.emit("join-chat", chatId);
+    }
   }
 
 
@@ -144,6 +160,10 @@ return (
         dispatch(selectChat(id));
         setSidebarOpen(false);
         getMessages(id);
+        // Join the selected chat room
+        if (socket) {
+          socket.emit("join-chat", id);
+        }
       }}
       onNewChat={handleNewChat}
       open={sidebarOpen}

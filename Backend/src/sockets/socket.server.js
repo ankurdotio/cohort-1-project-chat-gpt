@@ -42,99 +42,128 @@ function initSocketServer(httpServer) {
     })
 
     io.on("connection", (socket) => {
+        // Join a chat room
+        socket.on("join-chat", (chatId) => {
+            if (chatId) {
+                socket.join(chatId);
+            }
+        });
+
         socket.on("ai-message", async (messagePayload) => {
             /* messagePayload = { chat:chatId,content:message text } */
-            const [ message, vectors ] = await Promise.all([
-                messageModel.create({
-                    chat: messagePayload.chat,
-                    user: socket.user._id,
-                    content: messagePayload.content,
-                    role: "user"
-                }),
-                aiService.generateVector(messagePayload.content),
-            ])
+            try {
+                const [ message, vectors ] = await Promise.all([
+                    messageModel.create({
+                        chat: messagePayload.chat,
+                        user: socket.user._id,
+                        content: messagePayload.content,
+                        role: "user"
+                    }),
+                    aiService.generateVector(messagePayload.content),
+                ])
 
-            await createMemory({
-                vectors,
-                messageId: message._id,
-                metadata: {
-                    chat: messagePayload.chat,
-                    user: socket.user._id,
-                    text: messagePayload.content
-                }
-            })
-
-
-            const [ memory, chatHistory ] = await Promise.all([
-
-                queryMemory({
-                    queryVector: vectors,
-                    limit: 3,
+                await createMemory({
+                    vectors,
+                    messageId: message._id,
                     metadata: {
-                        user: socket.user._id
+                        chat: messagePayload.chat,
+                        user: socket.user._id,
+                        text: messagePayload.content
                     }
-                }),
+                })
 
-                messageModel.find({
+                const [ memory, chatHistory ] = await Promise.all([
+                    queryMemory({
+                        queryVector: vectors,
+                        limit: 3,
+                        metadata: {
+                            user: socket.user._id
+                        }
+                    }),
+                    messageModel.find({
+                        chat: messagePayload.chat
+                    }).sort({ createdAt: -1 }).limit(20).lean().then(messages => messages.reverse())
+                ])
+
+                const stm = chatHistory.map(item => {
+                    return {
+                        role: item.role,
+                        parts: [ { text: item.content } ]
+                    }
+                })
+
+                const ltm = [
+                    {
+                        role: "user",
+                        parts: [ {
+                            text: `
+                            these are some previous messages from the chat, use them to generate a response
+                            ${memory.map(item => item.metadata.text).join("\n")}
+                            ` } ]
+                    }
+                ]
+
+                // Check if socket is still connected before generating response
+                if (socket.disconnected) {
+                    messageModel.create({
+                        chat: messagePayload.chat,
+                        user: socket.user?._id,
+                        content: 'Error occurred: failed to process your request.',
+                        role: "model"
+                    });
+                    return;
+                }
+
+                const response = await aiService.generateResponse([ ...ltm, ...stm ])
+
+                // Check again after AI response (in case disconnect happened during processing)
+                if (socket.disconnected) {
+                    messageModel.create({
+                        chat: messagePayload.chat,
+                        user: socket.user?._id,
+                        content: 'Error occurred: failed to process your request.',
+                        role: "model"
+                    });
+                    return;
+                }
+
+                // Emit to the chat room, not just the sender
+                io.to(messagePayload.chat).emit('ai-response', {
+                    content: response,
                     chat: messagePayload.chat
-                }).sort({ createdAt: -1 }).limit(20).lean().then(messages => messages.reverse())
-            ])
+                })
 
-            const stm = chatHistory.map(item => {
-                return {
-                    role: item.role,
-                    parts: [ { text: item.content } ]
-                }
-            })
+                const [ responseMessage, responseVectors ] = await Promise.all([
+                    messageModel.create({
+                        chat: messagePayload.chat,
+                        user: socket.user._id,
+                        content: response,
+                        role: "model"
+                    }),
+                    aiService.generateVector(response)
+                ])
 
-            const ltm = [
-                {
-                    role: "user",
-                    parts: [ {
-                        text: `
-
-                        these are some previous messages from the chat, use them to generate a response
-
-                        ${memory.map(item => item.metadata.text).join("\n")}
-                        
-                        ` } ]
-                }
-            ]
-
-
-            const response = await aiService.generateResponse([ ...ltm, ...stm ])
-
-
-
-
-            socket.emit('ai-response', {
-                content: response,
-                chat: messagePayload.chat
-            })
-
-            const [ responseMessage, responseVectors ] = await Promise.all([
+                await createMemory({
+                    vectors: responseVectors,
+                    messageId: responseMessage._id,
+                    metadata: {
+                        chat: messagePayload.chat,
+                        user: socket.user._id,
+                        text: response
+                    }
+                })
+            } catch (err) {
+                // Save error message to DB as a model message
                 messageModel.create({
                     chat: messagePayload.chat,
-                    user: socket.user._id,
-                    content: response,
+                    user: socket.user?._id,
+                    content: 'Error occurred: failed to process your request.',
                     role: "model"
-                }),
-                aiService.generateVector(response)
-            ])
-
-            await createMemory({
-                vectors: responseVectors,
-                messageId: responseMessage._id,
-                metadata: {
-                    chat: messagePayload.chat,
-                    user: socket.user._id,
-                    text: response
-                }
-            })
-
-        })
-
-    })
+                });
+                // Do NOT emit error to socket here
+            }
+        });
+    });
 }
 
 

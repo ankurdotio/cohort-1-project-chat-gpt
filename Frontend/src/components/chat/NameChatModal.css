@@ -1,0 +1,115 @@
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+
+.modal-content {
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #111);
+  border-radius: 1.2rem;
+  padding-top: 5px;
+  padding-bottom: 20px;
+  box-shadow: 0 8px 40px rgba(16,24,40,0.18), 0 1.5px 8px rgba(0,0,0,0.06);
+  min-width: 340px;
+  max-width: 96vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1.5px solid var(--color-border, #d0d7de);
+  transition: box-shadow 0.22s, border-radius 0.22s;
+}
+
+
+.modal-content h2 {
+  margin-bottom: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.5px;
+  color: var(--color-text, #111);
+}
+
+
+
+.modal-content input[type="text"] {
+  width: 100%;
+  padding: var(--space-3) var(--space-3);
+  border-radius: 0.8rem;
+  border: 1.2px solid var(--color-border, #d0d7de);
+  background: var(--color-bg-alt, #f5f7fa);
+  color: var(--color-text, #111);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-base);
+  outline: none;
+  box-shadow: 0 1.5px 8px rgba(0,0,0,0.04);
+  font-family: var(--font-sans);
+  transition: box-shadow 0.18s, background 0.18s;
+}
+
+.modal-content input[type="text"]:focus {
+  background: var(--color-bg, #fff);
+  box-shadow: 0 2px 12px rgba(37,99,235,0.10);
+}
+
+
+.modal-actions {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+
+
+.cancel-btn {
+  background: none;
+  color: var(--color-text-muted, #5f6b7a);
+  border: 1.5px solid transparent;
+  padding: var(--space-2) var(--space-5);
+  border-radius: 1.2rem;
+  font-size: var(--text-base);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.18s, color 0.18s, border 0.18s;
+}
+
+.cancel-btn:hover {
+  background: var(--color-bg-alt, #f5f7fa);
+  color: var(--color-danger, #dc2626);
+  border: 1.5px solid var(--color-danger, #dc2626);
+}
+
+
+
+
+.submit-btn {
+  background: #ffffff00;
+  color: #ffffff;
+  border: 1px solid #fff;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0.8rem;
+  font-size: var(--text-base);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium);
+  font-family: var(--font-sans);
+  box-shadow: 0 1.5px 8px rgba(37,99,235,0.08);
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+}
+
+.submit-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-radius: 2.5rem;
+  box-shadow: 0 2px 12px rgba(37,99,235,0.13);
+}
